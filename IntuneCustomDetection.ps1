@@ -1,6 +1,11 @@
-# Version 1.4
-# Note: Fixed if($currUser -ne "Error: No current user found") logic
+# Version 1.5
+# Note: Added short description notes.
 # https://github.com/Harze2k/Intune/blob/main/IntuneCustomDetection.ps1
+#
+# Description:
+# Just change the variable $appToCheck to what you need.
+# Test locally so its found then upload as detection script for that app in Intune.
+#
 
 Function Get-CurrentUser 
 {
