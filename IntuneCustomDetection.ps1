@@ -1,4 +1,4 @@
-# Version 1.1
+# Version 1.2
 # https://github.com/Harze2k/Intune/blob/main/IntuneCustomDetection.ps1
 
 Function Get-CurrentUser 
