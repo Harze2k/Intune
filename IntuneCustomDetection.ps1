@@ -1,16 +1,16 @@
-# Version 1.0
-# https://github.com/Harze2k/Intune/IntuneCustomDetection
+# Version 1.1
+# https://github.com/Harze2k/Intune/blob/main/IntuneCustomDetection.ps1
 
 Function Get-CurrentUser 
 {
   $LoggedInUser = (Get-CimInstance -ClassName Win32_ComputerSystem).Username | Out-String
-    if($LoggedInUser.Contains('@')) 
+  	if($LoggedInUser.Contains('@')) 
     {
-      Write-Host 'Most likley logged in with UPN, returning that instead'
+    	Write-Host 'Most likley logged in with UPN, returning that instead'
       Return $LoggedInUser
     }
-    $LoggedInUser = $LoggedInUser.split("\")
-	    if($null -ne $LoggedInUser)
+	$LoggedInUser = $LoggedInUser.split("\")
+		if($null -ne $LoggedInUser)
       {
         $LoggedInUser = $LoggedInUser[1].TrimEnd()
         Return $LoggedInUser
@@ -51,14 +51,13 @@ $success = 0 #Set your preferred code here, 0 is the default used so maybe not c
 
 $currUser = Get-CurrentUser
 $app = Get-Uninstaller $appToCheck -ErrorAction SilentlyContinue 
-
   if ($null -ne ($app))
-    {
-      Write-Host "$($app.DisplayName) is there, perfect! Code: $success"
-      Exit $success
-    }
-    else 
-    {
-      Write-Host "$appToCheck not installed.. Error: $errorCode"
-      Exit $errorCode
-    }
+  {
+  	Write-Host "$($app.DisplayName) is there, perfect! Code: $success"
+    Exit $success
+ 	}
+  else 
+  {
+  	Write-Host "$appToCheck not installed.. Error: $errorCode"
+    Exit $errorCode
+ 	}
