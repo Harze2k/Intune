@@ -1,4 +1,5 @@
-# Version 1.3
+# Version 1.4
+# Note: Fixed if($currUser -ne "Error: No current user found") logic
 # https://github.com/Harze2k/Intune/blob/main/IntuneCustomDetection.ps1
 
 Function Get-CurrentUser 
@@ -37,9 +38,12 @@ Function Get-Uninstaller
 		if($currUser -ne "Error: No current user found")
       		{
         		$local_key_CU = "registry::HKEY_USERS\$($strSID.Value)\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
-        		$keys = @($local_key, $machine_key32, $machine_key64)
+        		$keys = @($local_key, $local_key_CU, $machine_key32, $machine_key64)
       		}
-    	$keys = @($local_key, $local_key_CU, $machine_key32, $machine_key64)
+      		else
+		{
+      			$keys = @($local_key, $machine_key32, $machine_key64)
+      		}
     	Get-ItemProperty -Path $keys -ErrorAction 'SilentlyContinue' | Where-Object{ ($_.DisplayName -like "*$Name*") -or ($_.PsChildName -like "*$Name*") } | Select-Object PsPath,DisplayVersion,DisplayName,UninstallString,InstallSource,InstallLocation,QuietUninstallString,InstallDate
 }
 
