@@ -1,5 +1,5 @@
-# Version 1.5
-# Note: Added short description notes.
+# Version 1.6
+# Note: Cleaned up extra | Out-String that was redundant.
 # https://github.com/Harze2k/Intune/blob/main/IntuneCustomDetection.ps1
 #
 # Description:
@@ -9,7 +9,7 @@
 
 Function Get-CurrentUser 
 {
-	$LoggedInUser = (Get-CimInstance -ClassName Win32_ComputerSystem).Username | Out-String
+	$LoggedInUser = (Get-CimInstance -ClassName Win32_ComputerSystem).Username
   		if($LoggedInUser.Contains('@')) 
     		{
     			Write-Host 'Most likley logged in with UPN, returning that instead'
