@@ -1,5 +1,5 @@
-# Version 1.6
-# Note: Cleaned up extra | Out-String that was redundant.
+# Version 1.7
+# Note: Improved error handling if no current user was found.
 # https://github.com/Harze2k/Intune/blob/main/IntuneCustomDetection.ps1
 #
 # Description:
@@ -9,22 +9,22 @@
 
 Function Get-CurrentUser 
 {
-	$LoggedInUser = (Get-CimInstance -ClassName Win32_ComputerSystem).Username
-  		if($LoggedInUser.Contains('@')) 
-    		{
-    			Write-Host 'Most likley logged in with UPN, returning that instead'
-      			Return $LoggedInUser
-    		}
+	$LoggedInUser = (Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue).Username
+	if($null -eq $LoggedInUser)
+	{
+  		Return "Error: No current user found"
+	}
+  	if($LoggedInUser.Contains('@')) 
+    	{
+    		Write-Host 'Most likley logged in with UPN, returning that instead'
+    		Return $LoggedInUser
+    	}
 	$LoggedInUser = $LoggedInUser.split("\")
-		if($null -ne $LoggedInUser)
-      		{
-        		$LoggedInUser = $LoggedInUser[1].TrimEnd()
-        		Return $LoggedInUser
-		}
-		if($null -eq $LoggedInUser)
-      		{
-			Return "Error: No current user found"
-		}
+	if($null -ne $LoggedInUser)
+    	{
+       		$LoggedInUser = $LoggedInUser[1].TrimEnd()
+       		Return $LoggedInUser
+	}
 }
 
 Function Get-Uninstaller 
@@ -35,20 +35,20 @@ Function Get-Uninstaller
     		[ValidateNotNullOrEmpty()]
     		[string] $Name
   	)    	
-	$objUser = New-Object System.Security.Principal.NTAccount($currUser)
-	$strSID = $objUser.Translate([System.Security.Principal.SecurityIdentifier])
     	$local_key     = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
     	$machine_key32 = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
     	$machine_key64 = 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
-		if($currUser -ne "Error: No current user found")
-      		{
-        		$local_key_CU = "registry::HKEY_USERS\$($strSID.Value)\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
-        		$keys = @($local_key, $local_key_CU, $machine_key32, $machine_key64)
-      		}
-      		else
-		{
-      			$keys = @($local_key, $machine_key32, $machine_key64)
-      		}
+	if($currUser -ne "Error: No current user found")
+      	{	
+		$objUser = New-Object System.Security.Principal.NTAccount($currUser)
+		$strSID = $objUser.Translate([System.Security.Principal.SecurityIdentifier])  
+        	$local_key_CU = "registry::HKEY_USERS\$($strSID.Value)\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
+        	$keys = @($local_key, $local_key_CU, $machine_key32, $machine_key64)
+      	}
+      	else
+	{
+      		$keys = @($local_key, $machine_key32, $machine_key64)
+      	}
     	Get-ItemProperty -Path $keys -ErrorAction 'SilentlyContinue' | Where-Object{ ($_.DisplayName -like "*$Name*") -or ($_.PsChildName -like "*$Name*") } | Select-Object PsPath,DisplayVersion,DisplayName,UninstallString,InstallSource,InstallLocation,QuietUninstallString,InstallDate
 }
 
