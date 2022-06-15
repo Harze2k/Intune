@@ -61,7 +61,7 @@ Function Get-Uninstaller
     		[switch] $StopProcess,
             [Switch] $CheckDetection
 
-  	)    	
+  		)    	
         $global:currUser = Get-CurrentUser
         $guidPattern = "(\{){0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}"
         $local_key     = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
