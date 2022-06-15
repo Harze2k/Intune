@@ -1,22 +1,31 @@
-# Version 2.0
-# Added -UninstallMSI and -Quiet
-# Get-Uninstaller -Name $appToCheck -UninstallMSI -Quiet
-# Will get you the application uninstalled if its an Msi, no status returned.
-#
-# Get-Uninstaller -Name $appToCheck -UninstallMSI
-# Will get you the application uninstalled if its an Msi, status from MsiExex (0 is prefered = success) and will get you pre-uninstall status from registry.
-#
-# Get-Uninstaller -Name $appToCheck
-# Will get you regedit information about the app, searching as [CurrentUser] and [SYSTEM] context.
-#
-# Note: Improved error handling if no current user was found.
-# https://github.com/Harze2k/Intune/blob/main/IntuneCustomDetection.ps1
-#
-# Description:
-# Just change the variable $appToCheck to what you need.
-# Test locally so its found then upload as detection script for that app in Intune.
-#
+# Version 2.5
+<#
 
+Get-Uninstaller -Name "Teams" -StopProcess                        // Will stop all processes related to the name "Teams" it can find and send back info about the closed processes and also about the application(s) found.
+Get-Uninstaller -Name "Teams" -StopProcess -Quiet                 // All of the above but silent, nothing returned.
+Get-Uninstaller -Name "Teams" -StopProcess -UninstallMSI          // Will stop all processes related to the name "Teams" it can find and send back info about the closed processes and also about the application(s) found. And silently uninstall any of them that has a MSI {GUID}. And return status from the uninstallation.
+Get-Uninstaller -Name "Teams" -StopProcess -UninstallMSI -Quiet   // All of the above but silent, nothing returned.
+
+Or for use with detecting installed applications in intune:
+
+$AppToCheck = "*Microsoft Teams*"
+$ErrorCode = 1605 #Set your preferred code here.
+$Success = 0
+
+$App = Get-Uninstaller -Name $AppToCheck
+
+if ($null -ne ($App))
+{
+	Write-Host "$($app.DisplayName) is there, perfect! Code: $Success"
+    	Exit $Success
+ }
+ else 
+ {
+ 	Write-Host "$AppToCheck not installed.. Error: $ErrorCode"
+    	Exit $ErrorCode
+ }
+
+#>
 Function Get-CurrentUser 
 {
 	$LoggedInUser = (Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue).Username
@@ -26,14 +35,14 @@ Function Get-CurrentUser
 	}
   	if($LoggedInUser.Contains('@')) 
     	{
-        	Write-Host 'Most likley logged in with UPN, returning that instead'
+       		Write-Host 'Most likley logged in with UPN, returning that instead'
     		Return $LoggedInUser
     	}
     	$LoggedInUser = $LoggedInUser.split("\")
 	if($null -ne $LoggedInUser)
     	{
-        	$LoggedInUser = $LoggedInUser[1].TrimEnd()
-       		Return $LoggedInUser
+       		$LoggedInUser = $LoggedInUser[1].TrimEnd()
+    		Return $LoggedInUser
 	}
 }
 
@@ -49,7 +58,10 @@ Function Get-Uninstaller
     		[switch] $UninstallMSI,
             	[Parameter(Mandatory = $false)]
     		[ValidateNotNullOrEmpty()]
-    		[switch] $Quiet
+    		[switch] $Quiet,
+		[Parameter(Mandatory = $false)]
+    		[ValidateNotNullOrEmpty()]
+    		[switch] $StopProcess
 
   	)    	
         $global:currUser = Get-CurrentUser
@@ -68,36 +80,69 @@ Function Get-Uninstaller
 	{
       		$keys = @($local_key, $machine_key32, $machine_key64)
       	}
-
-        $return = @(Get-ItemProperty -Path $keys -ErrorAction 'SilentlyContinue' | Where-Object { ($_.DisplayName -like "*$Name*") -or ($_.PsChildName -like "*$Name*") } -ErrorAction SilentlyContinue | Select-Object PsPath,DisplayVersion,DisplayName,UninstallString,InstallSource,InstallLocation,QuietUninstallString,InstallDate,MsiExec_Status -ErrorAction SilentlyContinue)
-        if ($Quiet.IsPresent -eq $false -and ($UninstallMSI.IsPresent) -eq $false)
-        {
-            	Return $return
-        }
-
-        if ($UninstallMSI.IsPresent)
-        {
-            	for ($i=0;$i -le $return.count -1;$i++ )
+        $return = @()
+        $return = @(Get-ItemProperty -Path $keys -ErrorAction 'SilentlyContinue' | Where-Object { ($_.DisplayName -like "*$Name*") -or ($_.PsChildName -like "*$Name*") } -ErrorAction SilentlyContinue | Select-Object PsPath,DisplayVersion,DisplayName,UninstallString,InstallSource,InstallLocation,QuietUninstallString,InstallDate,MsiExec_Status,RunningStatus -ErrorAction SilentlyContinue)
+        if($StopProcess.IsPresent)
+	{
+        	$SName = $Name.Replace('*','')
+            	$res = @()
+            	$status = Get-Process | Select-Object Product,ProcessName,Id,Name,HasExited | Where-Object {$_.Product -match "$SName" -or ($_.ProcessName) -match "$SName"}
+            	$res = ForEach($s in $status) {
+                	Stop-Process -Id $S.Id -PassThru -Force -ErrorAction SilentlyContinue
+            	}
+            	$StopStatus = "Found $($status.count) processes matching application: $SName and successfully closed $(($res.HasExited).Count)/$($status.count)"
+            	$statusCheck = Get-Process | Select-Object Product,ProcessName,Id,Name,HasExited | Where-Object {$_.Product -match "$SName" -or ($_.ProcessName) -match "$SName"}
+            	for ($i=0; $i -le $return.Count-1;$i++)
             	{
-                	if ($return[$i].QuietUninstallString -match 'MsiExec.exe /')
+                	if ($statusCheck -eq $null -and ($status) -eq $null)
                 	{
-                    		if($Quiet.IsPresent)
+                    		$return[$i].RunningStatus = ("Stopped, $SName had 0 processes running.")
+                	}
+                	elseif($statusCheck.count -eq $status.count)
+                	{
+                    		$return[$i].RunningStatus = ("Running, $SName has $($status.count)/$($statusCheck.count) processes still running.")
+                	}
+                	else
+                	{
+                    		if(($statusCheck.count) -eq $null -or ($statusCheck.count) -eq 0) 
                     		{
-                        		$uninstall = $return[$i].UninstallString.replace('/I{',"/X{").replace('}',"} /qn").replace('MsiExec.exe ','')
+                        		$return[$i].RunningStatus = ("Stopped, $SName had $($status.count) processes running and now 0 remains.")
+                    		} 
+                    		else 
+                    		{
+                        		$return[$i].RunningStatus = ("Unknown, $SName had $($status.count) processes running and now $($statusCheck.count) remains.")  
+                    		}
+                	}
+            	}
+        }
+        for ($i=0;$i -le $return.count -1;$i++ )
+	{
+		if ($Quiet.IsPresent -eq $false -and ($UninstallMSI.IsPresent) -eq $false )
+        	{
+            		$return
+                	Break
+        	}
+        	if ($UninstallMSI.IsPresent)
+        	{
+               		if ($return[$i].QuietUninstallString -match 'MsiExec.exe /')
+               		{
+              			if($Quiet.IsPresent)
+               			{
+               		    		$uninstall = $return[$i].UninstallString.replace('/I{',"/X{").replace('}',"} /qn").replace('MsiExec.exe ','')
                         		Start-Process "msiexec.exe" -ArgumentList "$uninstall" -NoNewWindow -Wait
                         		if ($i -lt $return.Count -1)
                         		{
                             			Start-Sleep -Seconds 5
                         		}
                     		}
-                    		else
+               			else
                     		{
                         		$uninstall = $return[$i].UninstallString.replace('/I{',"/X{").replace('}',"} /qn").replace('MsiExec.exe ','')
                         		$Guid = [Regex]::Matches($return[$i].UninstallString.replace('/I{',"/X{").replace('}',"} /qn").replace('MsiExec.exe ',''), $guidPattern).Value
                         		$ExitCode = (Start-Process "msiexec.exe" -ArgumentList "$uninstall" -NoNewWindow -Wait -PassThru).ExitCode
                         		if ($i -lt $return.Count -1)
                         		{
-                           			Start-Sleep -Seconds 5
+                            			Start-Sleep -Seconds 5
                         		}
                         		$return[$i].MsiExec_Status = ("[App: $($return[$i].DisplayName)] [GUID: $Guid] [Version: $($return[$i].DisplayVersion.ToString())] returned [ExitCode: $ExitCode] from MsiExec Uninstall.")
                         		if($i -eq $return.Count -1)
@@ -133,7 +178,6 @@ Function Get-Uninstaller
                             			Start-Sleep -Seconds 3
                             			$return
                         		}
-                        
                     		}
                 	}
                 	else 
@@ -153,26 +197,5 @@ Function Get-Uninstaller
                     		}
                 	}
       		}	
-	}
+        }
 }
-
-##### Variables - Change below #####
-$appToCheck = "*Microsoft Teams*" #App to search for.
-$errorCode = 1605 #Set your preferred code here.
-$success = 0 #Set your preferred code here, 0 is the default used so maybe not change it.
-##### Variables - Change above #####
-
-$ReturnedStatus = Get-Uninstaller -Name $appToCheck
-#$ReturnedStatus[0..$($ReturnedStatus.Count -1)].MsiExec_Status
-
-$app = Get-Uninstaller $appToCheck -ErrorAction SilentlyContinue 
-if ($null -ne ($app))
-{
-	Write-Host "$($app.DisplayName) is there, perfect! Code: $success"
-    	Exit $success
- }
- else 
- {
- 	Write-Host "$appToCheck not installed.. Error: $errorCode"
-    	Exit $errorCode
- }
