@@ -1,4 +1,4 @@
-# Version 2.6
+# Version 2.7
 <#
 Get-Uninstaller -Name "Teams"                                       // Will retrun data from the registry for that application
 Get-Uninstaller -Name "Teams" -CheckDetection                       // Quick check if present for Intune detection, $return true or $false
